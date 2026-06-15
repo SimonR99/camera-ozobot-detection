@@ -3,9 +3,9 @@ requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "ozobot-bands"
-version = "0.1.0"
-description = "OpenCV pipeline to detect Ozobot-style 3-color bands from a camera"
+name = "ozobot-vision-motion"
+version = "0.2.0"
+description = "Read a colour sheet with a camera and drive a Unitree G1 from the decoded colour order"
 readme = "README.md"
 requires-python = ">=3.8"
 dependencies = [
@@ -18,14 +18,17 @@ dev = ["pytest>=7.0"]
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["ozobot_bands*"]
+# motion is intentionally excluded: it needs the Unitree SDK in the system
+# interpreter, not this .venv (see motion/README.md). The controller drives it
+# via subprocess, so it does not need to be importable here.
+include = ["vision*"]
 
 [tool.setuptools]
 py-modules = []
 
 [tool.pytest.ini_options]
-# Collect only the real test package: scripts/ holds CLI tools, not tests.
-testpaths = ["tests"]
+# vision/ holds the only importable test package; motion needs the robot SDK.
+testpaths = ["vision/tests"]
 # This machine's interpreter exposes ROS pytest plugins that fail to import;
 # disable them so `pytest` runs out of the box.
 addopts = "-p no:launch_testing -p no:launch_ros -p no:ament_flake8 -p no:ament_pep257 -p no:ament_copyright -p no:ament_lint -p no:ament_xmllint"
