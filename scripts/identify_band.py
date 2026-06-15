@@ -93,6 +93,8 @@ def result_to_json(
     record = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "band_detected": result.band_detected,
+        "combination_detected": result.combination_detected,
+        "matched_combinations": result.matched_combinations,
         "colors": result.colors_sequence,
         "color_code": "-".join(result.colors_sequence) if result.colors_sequence else "",
         "unique_colors": sorted({c for c in result.colors_sequence}),
@@ -117,8 +119,11 @@ def write_json(path: Path, record: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(record, indent=2))
     print(f"Saved: {path}")
-    if record["band_detected"]:
+    if record.get("matched_combinations"):
+        print(f"  MATCH: {', '.join(record['matched_combinations'])}")
         print(f"  colors: {record['color_code']}")
+    elif record["band_detected"]:
+        print(f"  colors: {record['color_code']} (no defined combination matched)")
         print(f"  confidence: {record['confidence']}")
     else:
         print("  no band detected")
@@ -170,8 +175,8 @@ def run_once(detector: BandDetector, cap: cv2.VideoCapture, args: argparse.Names
     ret, frame = cap.read()
     if not ret:
         raise SystemExit("Failed to read from camera")
-    capture_and_save(detector, frame, args, label="once")
-    return 0 if detector.detect(frame).band_detected else 1
+    result = capture_and_save(detector, frame, args, label="once")
+    return 0 if result.band_detected else 1
 
 
 def run_interactive(detector: BandDetector, cap: cv2.VideoCapture, args: argparse.Namespace) -> int:
@@ -212,8 +217,13 @@ def run_interactive(detector: BandDetector, cap: cv2.VideoCapture, args: argpars
 
         result = detector.detect(frame)
 
+        # When combinations are defined, auto-save only on a real combination
+        # match; otherwise fall back to the generic 3-color band.
+        trigger = (
+            result.combination_detected if detector.combinations else result.band_detected
+        )
         if args.auto and not saved_auto:
-            if result.band_detected:
+            if trigger:
                 stable_count += 1
                 if stable_count >= args.stable_frames:
                     capture_and_save(detector, frame, args, label="auto")

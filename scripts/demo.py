@@ -41,7 +41,11 @@ def main() -> None:
         result = detector.detect(frame)
         display = detector.draw_debug(frame, result)
 
-        if result.band_detected:
+        if result.combination_detected:
+            print(
+                f"MATCH {result.matched_combinations} | colors={result.colors_sequence}"
+            )
+        elif result.band_detected:
             print(
                 f"BAND DETECTED | colors={result.colors_sequence} "
                 f"confidence={result.confidence:.2f}"

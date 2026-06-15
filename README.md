@@ -1,6 +1,16 @@
 # Ozobot Band Detection
 
-OpenCV pipeline to detect **Ozobot-style color bands** (red, green, blue) from a camera feed. Returns a `band_detected` flag when all three chromatic colors appear as contiguous segments on a scan line.
+OpenCV pipeline to detect **color-tape blocks** from a camera feed. You calibrate any colors you like, group them into named **combinations**, and the detector flags when tape on the floor forms one of those combinations — at any position or rotation in the frame.
+
+The classic Ozobot block (red + green + blue) is just one combination you can define. Detection is **unordered**: a combination matches whenever the same *set* of colors is read, regardless of left-to-right order.
+
+## Concepts
+
+- **Color** — a named HSV range you calibrate from the camera (`scripts/calibrate.py`). Any number of arbitrary colors are supported, not just red/green/blue.
+- **Combination** — a named group of colors (2 or more; 3 is the typical Ozobot block) managed with `scripts/combinations.py`. The set of colors is what matters, not their order.
+- The reserved color name **`black`** is treated as a separator, not a tape color.
+
+If no combinations are defined yet, detection falls back to the generic rule "≥ 3 distinct calibrated colors form a block."
 
 ## Install
 
@@ -42,19 +52,38 @@ Saved colors are highlighted in real time. Paste an existing name in paste mode 
 - If detection misses faint colors, increase padding with `+`.
 - If non-band colors trigger detection, decrease padding with `-` or enable black separators with `t`.
 
-### 2. Run detection
+### 2. Group colors into combinations
+
+Open the interactive manager/viewer, pick saved colors to build a combination, name it, and save. The live banner shows which combination the camera currently matches.
+
+```bash
+python scripts/combinations.py --calibration calibration.json
+```
+
+| Key | Action |
+|-----|--------|
+| **Click** swatch / `1`–`9` | Toggle that saved color in/out of the current selection |
+| `n` | Name + save the current selection as a combination (needs ≥ 2 colors) |
+| `c` | Clear the current selection |
+| `d` | Delete a saved combination by name |
+| `Esc` | Cancel name/delete entry (or clear selection) |
+| `q` | Quit |
+
+Combinations are stored in the same JSON file as the colors. Use `--no-camera` to manage combinations without a live feed.
+
+### 3. Run detection
 
 ```bash
 python scripts/demo.py --calibration calibration.json
 ```
 
-### 3. Identify band colors and save JSON
+### 4. Identify band colors and save JSON
 
 ```bash
 python scripts/identify_band.py --calibration calibration.json --output band_detection.json
 ```
 
-Press `s` in the preview to save the detected color sequence. **Click** on the band to move the scan line to that row. Or auto-save when stable:
+Press `s` in the preview to save the detected color sequence. **Click** on the band to move the scan line to that row. Or auto-save when stable (with combinations defined, auto-save fires only on a real combination match):
 
 ```bash
 python scripts/identify_band.py --auto --stable-frames 8 --output band_detection.json
@@ -72,6 +101,8 @@ Example `band_detection.json`:
 {
   "timestamp": "2026-06-15T12:00:00+00:00",
   "band_detected": true,
+  "combination_detected": true,
+  "matched_combinations": ["ozobot"],
   "colors": ["red", "green", "blue"],
   "color_code": "red-green-blue",
   "unique_colors": ["blue", "green", "red"],
@@ -81,7 +112,7 @@ Example `band_detection.json`:
 }
 ```
 
-### 4. Use in code
+### 5. Use in code
 
 ```python
 from pathlib import Path
@@ -95,9 +126,10 @@ ret, frame = cap.read()
 
 result = detector.detect(frame)
 
-if result.band_detected:
-    print(f"Band found: {result.colors_sequence}")  # e.g. ['red', 'green', 'blue']
-    print(f"Confidence: {result.confidence}")
+if result.combination_detected:
+    print(f"Matched: {result.matched_combinations}")  # e.g. ['ozobot']
+elif result.band_detected:
+    print(f"Colors found (no combination): {result.colors_sequence}")
 ```
 
 ## API
@@ -106,28 +138,39 @@ if result.band_detected:
 
 | Field | Description |
 |-------|-------------|
-| `band_detected` | `True` when ≥3 distinct band colors (R/G/B) are found |
+| `combination_detected` | `True` when the colors read match a defined combination |
+| `matched_combinations` | Names of the matched combinations (set-equality on colors) |
+| `band_detected` | `True` when enough distinct tape colors form a block (generic rule) |
 | `colors_sequence` | Ordered list of detected colors on the scan line |
-| `confidence` | 0.0–1.0 (1.0 when all three primaries are present) |
+| `confidence` | 0.0–1.0 |
 | `color_runs` | Raw segments as `(color, start_col, end_col)` |
 | `roi` | Scan region `(x, y, width, height)` |
 
 ## How it works
 
-1. Extract a horizontal strip from the frame (centered vertically, configurable).
-2. Convert to HSV and classify each column using calibrated color ranges.
-3. Merge columns into contiguous color runs, filtering short noise segments.
-4. Set `band_detected` when at least three distinct Ozobot colors appear as runs.
+1. Search positions and angles in the frame for the richest reading (works at any rotation/offset).
+2. Extract a thin strip along the scan line, convert to HSV, and classify each column against **every** calibrated color.
+3. Merge columns into contiguous color runs, dropping short noise segments.
+4. Take the distinct tape colors read and match them, as an unordered set, against the defined combinations. With none defined, fall back to "≥ 3 distinct colors."
 
 ## Project layout
 
 ```
 ozobot_bands/
-  colors.py       # Ozobot color definitions and HSV classification
-  calibration.py  # Save/load calibration JSON
-  detector.py     # BandDetector pipeline
+  colors.py        # Color definitions and HSV classification
+  color_library.py # Named colors + combinations (JSON v3) and set matcher
+  calibration.py   # Save/load calibration JSON
+  detector.py      # BandDetector pipeline (combination matching)
 scripts/
-  calibrate.py    # Interactive calibration UI
-  demo.py         # Live webcam demo
-  identify_band.py # Camera → identify colors → save JSON
+  calibrate.py     # Interactive color picker/modifier
+  combinations.py  # Interactive combination manager + live viewer
+  demo.py          # Live webcam demo
+  identify_band.py # Camera → identify colors / combinations → save JSON
+  check_synthetic.py # Run detection on generated synthetic tags
+```
+
+## Tests
+
+```bash
+pytest
 ```

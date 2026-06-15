@@ -3,7 +3,7 @@
 import math
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 import cv2
 import numpy as np
@@ -267,7 +267,7 @@ class BandDetector:
     ) -> List[Tuple[int, int]]:
         refined: List[Tuple[int, int]] = []
         offsets = (-step // 2, 0, step // 2)
-        seen: set[Tuple[int, int]] = set()
+        seen: Set[Tuple[int, int]] = set()
         expand_limit = min(len(candidates), 8)
 
         for cx, cy in candidates[:expand_limit]:

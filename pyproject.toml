@@ -7,7 +7,7 @@ name = "ozobot-bands"
 version = "0.1.0"
 description = "OpenCV pipeline to detect Ozobot-style 3-color bands from a camera"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.8"
 dependencies = [
     "opencv-python>=4.8.0",
     "numpy>=1.24.0",
@@ -22,3 +22,10 @@ include = ["ozobot_bands*"]
 
 [tool.setuptools]
 py-modules = []
+
+[tool.pytest.ini_options]
+# Collect only the real test package: scripts/ holds CLI tools, not tests.
+testpaths = ["tests"]
+# This machine's interpreter exposes ROS pytest plugins that fail to import;
+# disable them so `pytest` runs out of the box.
+addopts = "-p no:launch_testing -p no:launch_ros -p no:ament_flake8 -p no:ament_pep257 -p no:ament_copyright -p no:ament_lint -p no:ament_xmllint"
