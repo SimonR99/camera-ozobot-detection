@@ -18,7 +18,7 @@ while the Unitree SDK is installed only for the system ``/usr/bin/python3`` (see
 motion/README.md). So this script runs under ``.venv`` and invokes motion through
 its CLI as a subprocess::
 
-    /usr/bin/python3 -m motion walk 1.0 --yes --iface eth0
+    /usr/bin/python3 -m motion --yes --iface eth0 walk 1.0
 
 Safety: the robot only moves with ``--execute``. Without it the controller is a
 dry run that prints/speaks the plan but sends no motion commands.
@@ -80,10 +80,11 @@ class MotionExecutor:
         self.timeout = timeout
 
     def _command(self, subcmd: str, arg: Optional[str]) -> List[str]:
-        cmd = [self.python_bin, "-m", "motion", subcmd]
+        # The motion CLI's --yes/--iface are parent options: argparse requires
+        # them *before* the subcommand, not after.
+        cmd = [self.python_bin, "-m", "motion", "--yes", "--iface", self.iface, subcmd]
         if arg is not None:
             cmd.append(arg)
-        cmd += ["--yes", "--iface", self.iface]
         return cmd
 
     def run(self, color: str) -> bool:

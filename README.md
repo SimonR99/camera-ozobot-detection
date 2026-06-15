@@ -52,14 +52,13 @@ and speaks the plan but sends no motion commands. `--camera N` uses a local
 device (RealSense colour stream is usually `4`); `--ros-topic /camera/color/image_raw`
 shares the camera through the RealSense ROS 2 node instead.
 
-## ROS 2 bringup
+## ROS 2 camera
 
-[`launch/ozobot_bringup.launch.py`](launch/ozobot_bringup.launch.py) starts the
-RealSense camera node (publishing `/camera/color/image_raw`) and the G1 ROS 2
-bridge together:
+Start the RealSense camera node (publishes `/camera/color/image_raw`, which the
+vision pipeline reads with `--ros-topic`):
 
 ```bash
-ros2 launch launch/ozobot_bringup.launch.py
+ros2 launch realsense2_camera rs_launch.py
 ```
 
 ## Calibration
@@ -79,7 +78,6 @@ pytest        # vision/tests (motion needs the robot SDK, so it is not collected
 ```
 vision/      colour detection + mission mapping + French TTS + controller
 motion/      Unitree G1 closed-loop motion API + CLI
-launch/      ROS 2 bringup (RealSense camera + G1 bridge)
 calibration.json   calibrated colours, combinations, detection params, actions
 image.png    sample colour sheet
 ```
