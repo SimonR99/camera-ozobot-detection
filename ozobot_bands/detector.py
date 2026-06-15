@@ -36,6 +36,13 @@ class DetectionParams:
     require_black_separators: bool = False
     roi_y_center_ratio: float = 0.5
     roi_width_ratio: float = 1.0
+    # Detection region of interest as frame-fraction bounds. A band is only
+    # detected when its scan center falls inside this rectangle. Defaults to the
+    # whole frame (no restriction).
+    detect_x_min_ratio: float = 0.0
+    detect_x_max_ratio: float = 1.0
+    detect_y_min_ratio: float = 0.0
+    detect_y_max_ratio: float = 1.0
     scan_line_length_px: int = 0
     scan_line_length_ratio: float = 0.22
     position_search_enabled: bool = True
@@ -54,6 +61,10 @@ class DetectionParams:
             require_black_separators=data.get("require_black_separators", False),
             roi_y_center_ratio=data.get("roi_y_center_ratio", 0.5),
             roi_width_ratio=data.get("roi_width_ratio", 1.0),
+            detect_x_min_ratio=data.get("detect_x_min_ratio", 0.0),
+            detect_x_max_ratio=data.get("detect_x_max_ratio", 1.0),
+            detect_y_min_ratio=data.get("detect_y_min_ratio", 0.0),
+            detect_y_max_ratio=data.get("detect_y_max_ratio", 1.0),
             scan_line_length_px=data.get("scan_line_length_px", 0),
             scan_line_length_ratio=data.get("scan_line_length_ratio", 0.22),
             position_search_enabled=data.get("position_search_enabled", True),
@@ -167,8 +178,34 @@ class BandDetector:
     def _strip_height(self, frame_h: int) -> int:
         return max(3, int(frame_h * self.params.scan_strip_height_ratio))
 
+    def _detect_region(self, frame_h: int, frame_w: int) -> Tuple[int, int, int, int]:
+        """Pixel bounds (x0, y0, x1, y1) of the detection region of interest."""
+        p = self.params
+        x0 = int(frame_w * p.detect_x_min_ratio)
+        x1 = int(frame_w * p.detect_x_max_ratio)
+        y0 = int(frame_h * p.detect_y_min_ratio)
+        y1 = int(frame_h * p.detect_y_max_ratio)
+        return x0, y0, x1, y1
+
+    def _region_is_full(self) -> bool:
+        p = self.params
+        return (
+            p.detect_x_min_ratio <= 0.0
+            and p.detect_x_max_ratio >= 1.0
+            and p.detect_y_min_ratio <= 0.0
+            and p.detect_y_max_ratio >= 1.0
+        )
+
+    def _in_region(self, cx: int, cy: int, frame_h: int, frame_w: int) -> bool:
+        x0, y0, x1, y1 = self._detect_region(frame_h, frame_w)
+        return x0 <= cx <= x1 and y0 <= cy <= y1
+
     def _fixed_scan_center(self, frame_h: int, frame_w: int) -> Tuple[int, int]:
-        return frame_w // 2, int(frame_h * self.params.roi_y_center_ratio)
+        x0, y0, x1, y1 = self._detect_region(frame_h, frame_w)
+        cx = (x0 + x1) // 2
+        cy = int(frame_h * self.params.roi_y_center_ratio)
+        cy = min(max(cy, y0), y1)
+        return cx, cy
 
     def _build_band_color_mask(self, frame_bgr: np.ndarray) -> np.ndarray:
         hsv = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2HSV)
@@ -221,8 +258,12 @@ class BandDetector:
         half_w = line_len // 2
         half_h = max(4, line_len // 4)
 
-        for cy in range(margin, h - margin, step):
-            for cx in range(margin, w - margin, step):
+        rx0, ry0, rx1, ry1 = self._detect_region(h, w)
+        cy_lo, cy_hi = max(margin, ry0), min(h - margin, ry1)
+        cx_lo, cx_hi = max(margin, rx0), min(w - margin, rx1)
+
+        for cy in range(cy_lo, cy_hi, step):
+            for cx in range(cx_lo, cx_hi, step):
                 x0, x1 = cx - half_w, cx + half_w
                 y0, y1 = cy - half_h, cy + half_h
                 score = int(band_mask[y0:y1, x0:x1].sum())
@@ -244,8 +285,8 @@ class BandDetector:
             return self._expand_position_candidates(candidates, step, h, w, margin)
 
         fallback: List[Tuple[int, int]] = []
-        for cy in range(margin, h - margin, step):
-            for cx in range(margin, w - margin, step):
+        for cy in range(cy_lo, cy_hi, step):
+            for cx in range(cx_lo, cx_hi, step):
                 fallback.append((cx, cy))
         if not fallback:
             return [self._fixed_scan_center(h, w)]
@@ -546,6 +587,9 @@ class BandDetector:
 
             if not result.band_detected:
                 continue
+            cx, cy = result.scan_center
+            if not self._in_region(cx, cy, h, w):
+                continue
 
             score = self._score_result(result)
             if score > best_score:
@@ -582,6 +626,29 @@ class BandDetector:
     ) -> np.ndarray:
         """Overlay ROI, scan line, and detection status on a copy of the frame."""
         debug = frame_bgr.copy()
+        h, w = debug.shape[:2]
+
+        # Detection region of interest (only drawn when restricted to a sub-area).
+        if not self._region_is_full():
+            rx0, ry0, rx1, ry1 = self._detect_region(h, w)
+            zone_color = (0, 200, 0) if result.band_detected else (160, 160, 160)
+            # Dim everything outside the active zone so it reads at a glance.
+            shade = debug.copy()
+            cv2.rectangle(shade, (0, 0), (w, h), (0, 0, 0), -1)
+            cv2.rectangle(shade, (rx0, ry0), (rx1, ry1), (255, 255, 255), -1)
+            mask = shade[:, :, 0] == 0
+            debug[mask] = (0.5 * debug[mask]).astype(debug.dtype)
+            cv2.rectangle(debug, (rx0, ry0), (rx1, ry1), zone_color, 2)
+            cv2.putText(
+                debug,
+                "detection zone",
+                (rx0 + 6, max(ry0 + 22, 22)),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.6,
+                zone_color,
+                2,
+            )
+
         x, y, rw, rh = result.roi
         color = (0, 255, 0) if result.band_detected else (0, 0, 255)
         cv2.rectangle(debug, (x, y), (x + rw, y + rh), color, 2)

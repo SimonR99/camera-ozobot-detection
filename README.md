@@ -39,6 +39,21 @@ python scripts/demo.py --camera 4
 python scripts/demo.py --ros-topic /camera/color/image_raw
 ```
 
+### Bring up the camera + robot bridge
+
+`launch/ozobot_bringup.launch.py` starts the RealSense node and the
+`g1_ros2_bridge` together (the bridge runs with its own camera disabled so the two
+don't fight over the device). After sourcing ROS 2 and the `unitree_g1_ros2`
+workspace:
+
+```bash
+ros2 launch launch/ozobot_bringup.launch.py
+```
+
+It publishes `/camera/color/image_raw`; then run any script with
+`--ros-topic /camera/color/image_raw`. Useful overrides:
+`pointcloud_enable:=false`, `g1_interface:=eth0`.
+
 ## Quick start
 
 ### 1. Calibrate (recommended)
@@ -96,6 +111,19 @@ Combinations are stored in the same JSON file as the colors. Use `--no-camera` t
 
 ```bash
 python scripts/demo.py --calibration calibration.json
+```
+
+Detection is restricted to a **region of interest** — by default the **bottom half**
+of the frame (height) and the **middle half** (width), i.e. a `¼ ignore / ½ detect /
+¼ ignore` split horizontally. A 3-color block only counts when it is read inside that
+zone; the zone is drawn on screen, brightens when a block is found, and a banner shows
+the detected colors. Override or disable the region:
+
+```bash
+# custom region (frame fractions)
+python scripts/demo.py --region-x-min 0.2 --region-x-max 0.8 --region-y-min 0.6 --region-y-max 1.0
+# whole frame
+python scripts/demo.py --full-frame
 ```
 
 ### 4. Identify band colors and save JSON
