@@ -8,8 +8,8 @@ from typing import Dict, List, Optional, Set, Tuple
 import cv2
 import numpy as np
 
-from ozobot_bands.calibration import NAME_TO_COLOR, get_ranges
-from ozobot_bands.colors import (
+from vision.calibration import NAME_TO_COLOR, get_ranges
+from vision.colors import (
     COLOR_NAMES,
     SEPARATOR_NAME,
     UNKNOWN_NAME,
@@ -18,7 +18,7 @@ from ozobot_bands.colors import (
     classify_named_columns,
     extract_label_runs,
 )
-from ozobot_bands.color_library import (
+from vision.color_library import (
     Combination,
     load_color_library,
     match_combinations,

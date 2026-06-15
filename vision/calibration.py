@@ -7,7 +7,7 @@ from typing import Dict, List, Optional, Set, Tuple
 import cv2
 import numpy as np
 
-from ozobot_bands.colors import (
+from vision.colors import (
     DEFAULT_BGR,
     HSVRange,
     OzobotColor,
@@ -199,7 +199,7 @@ def load_calibration(path: Path) -> Tuple[
     Set[OzobotColor],
     Dict[OzobotColor, Tuple[int, int]],
 ]:
-    from ozobot_bands.color_library import load_color_library, ozobot_ranges_from_library
+    from vision.color_library import load_color_library, ozobot_ranges_from_library
 
     library = load_color_library(path)
     ranges = ozobot_ranges_from_library(library)
@@ -224,7 +224,7 @@ def load_calibration(path: Path) -> Tuple[
 
 def get_ranges(calibration_path: Optional[Path] = None) -> Dict[OzobotColor, HSVRange]:
     if calibration_path and calibration_path.exists():
-        from ozobot_bands.color_library import load_color_library, ozobot_ranges_from_library
+        from vision.color_library import load_color_library, ozobot_ranges_from_library
 
         library = load_color_library(calibration_path)
         mapped = ozobot_ranges_from_library(library)

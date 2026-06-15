@@ -9,8 +9,8 @@ from typing import Dict, FrozenSet, List, Optional, Set, Tuple
 import cv2
 import numpy as np
 
-from ozobot_bands.colors import HSVRange, OzobotColor
-from ozobot_bands.calibration import hsv_range_from_samples, NAME_TO_COLOR
+from vision.colors import HSVRange, OzobotColor
+from vision.calibration import hsv_range_from_samples, NAME_TO_COLOR
 
 
 LIBRARY_VERSION = 3

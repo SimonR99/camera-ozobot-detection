@@ -1,0 +1,10 @@
+{
+  "_comment": "Colour -> French correction action, phrased to match motion.controller. Pass with --actions, or paste this block under an \"actions\" key in calibration.json. Keys must match calibrated colour names.",
+  "actions": {
+    "green": "Avance d'un mètre",
+    "blue": "Tourne de quarante-cinq degrés",
+    "orange": "Salue de la main",
+    "yellow": "Tourne de moins quarante-cinq degrés",
+    "red": "Arrête-toi"
+  }
+}
