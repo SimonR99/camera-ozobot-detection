@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ozobot-bands"
+version = "0.1.0"
+description = "OpenCV pipeline to detect Ozobot-style 3-color bands from a camera"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "opencv-python>=4.8.0",
+    "numpy>=1.24.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["ozobot_bands*"]
+
+[tool.setuptools]
+py-modules = []
