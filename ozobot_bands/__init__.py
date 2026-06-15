@@ -11,6 +11,14 @@ from ozobot_bands.color_library import (
     match_combinations,
     save_color_library,
 )
+from ozobot_bands.frame_source import (
+    FrameSource,
+    OpenCVCameraSource,
+    Ros2ImageSource,
+    add_source_args,
+    open_checked,
+    open_frame_source,
+)
 
 __version__ = "0.1.0"
 
@@ -29,4 +37,10 @@ __all__ = [
     "load_color_library",
     "save_color_library",
     "match_combinations",
+    "FrameSource",
+    "OpenCVCameraSource",
+    "Ros2ImageSource",
+    "add_source_args",
+    "open_checked",
+    "open_frame_source",
 ]

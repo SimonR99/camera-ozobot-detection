@@ -22,13 +22,14 @@ from ozobot_bands import BandDetector
 from ozobot_bands.calibration import infer_color_at_pixel
 from ozobot_bands.colors import COLOR_NAMES
 from ozobot_bands.detector import BandDetectionResult, DetectionParams
+from ozobot_bands.frame_source import FrameSource, add_source_args, open_checked
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Identify Ozobot band colors and save to JSON",
     )
-    parser.add_argument("--camera", type=int, default=0, help="Camera index")
+    add_source_args(parser)
     parser.add_argument(
         "--calibration",
         type=Path,
@@ -171,7 +172,7 @@ def capture_and_save(
     return result
 
 
-def run_once(detector: BandDetector, cap: cv2.VideoCapture, args: argparse.Namespace) -> int:
+def run_once(detector: BandDetector, cap: FrameSource, args: argparse.Namespace) -> int:
     ret, frame = cap.read()
     if not ret:
         raise SystemExit("Failed to read from camera")
@@ -179,7 +180,7 @@ def run_once(detector: BandDetector, cap: cv2.VideoCapture, args: argparse.Names
     return 0 if result.band_detected else 1
 
 
-def run_interactive(detector: BandDetector, cap: cv2.VideoCapture, args: argparse.Namespace) -> int:
+def run_interactive(detector: BandDetector, cap: FrameSource, args: argparse.Namespace) -> int:
     window = "Identify Ozobot Band (click=scan, s=save, q=quit)"
     show_preview = not args.no_preview
     stable_count = 0
@@ -274,9 +275,7 @@ def main() -> None:
     args = parse_args()
     detector = build_detector(args)
 
-    cap = cv2.VideoCapture(args.camera)
-    if not cap.isOpened():
-        raise SystemExit(f"Cannot open camera {args.camera}")
+    cap = open_checked(args)
 
     try:
         if args.once:

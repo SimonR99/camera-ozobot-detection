@@ -39,6 +39,7 @@ from ozobot_bands.color_library import (
 )
 from ozobot_bands.colors import HSVRange
 from ozobot_bands.detector import DetectionParams
+from ozobot_bands.frame_source import add_source_args, open_checked
 from ozobot_bands.visualization import (
     draw_calibration_ui,
     draw_named_color_highlights,
@@ -80,7 +81,7 @@ class CalibrateState:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Named color calibration UI")
-    parser.add_argument("--camera", type=int, default=0)
+    add_source_args(parser)
     parser.add_argument("--output", type=Path, default=Path("calibration.json"))
     parser.add_argument("--load", type=Path, default=None)
     parser.add_argument("--highlight-alpha", type=float, default=0.45)
@@ -227,9 +228,7 @@ def main() -> None:
     default_sv = 40
     state = CalibrateState()
 
-    cap = cv2.VideoCapture(args.camera)
-    if not cap.isOpened():
-        raise SystemExit(f"Cannot open camera {args.camera}")
+    cap = open_checked(args)
 
     window = "Color Calibration"
     cv2.namedWindow(window)

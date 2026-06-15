@@ -18,6 +18,27 @@ If no combinations are defined yet, detection falls back to the generic rule "�
 pip install -e .
 ```
 
+## Camera source
+
+Every script reads frames from one of two backends, selected by the same flags:
+
+- `--camera N` — local OpenCV device index (default `0`). On an **Intel RealSense**
+  the colour stream is usually index **4** (`0`=depth, `2`=infrared), and the device
+  reads as *busy* if the `realsense2_camera` ROS node already holds it.
+- `--ros-topic TOPIC` — subscribe to a ROS 2 `sensor_msgs/Image` topic instead of a
+  local device, e.g. `--ros-topic /camera/color/image_raw`. Use this to share the
+  camera with the robot stack (the RealSense node owns the device and publishes the
+  image). Requires a sourced ROS 2 workspace; `--ros-timeout` (default 5s) bounds the
+  wait for a frame. `--ros-topic` takes precedence over `--camera`.
+
+```bash
+# Local USB/RealSense colour device
+python scripts/demo.py --camera 4
+
+# Shared via the realsense2_camera ROS node
+python scripts/demo.py --ros-topic /camera/color/image_raw
+```
+
 ## Quick start
 
 ### 1. Calibrate (recommended)

@@ -6,12 +6,12 @@ from pathlib import Path
 
 import cv2
 
-from ozobot_bands import BandDetector
+from ozobot_bands import BandDetector, add_source_args, open_checked
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Ozobot band detection demo")
-    parser.add_argument("--camera", type=int, default=0, help="Camera index")
+    add_source_args(parser)
     parser.add_argument(
         "--calibration",
         type=Path,
@@ -26,9 +26,7 @@ def main() -> None:
     cal_path = args.calibration if args.calibration.exists() else None
     detector = BandDetector(calibration_path=cal_path)
 
-    cap = cv2.VideoCapture(args.camera)
-    if not cap.isOpened():
-        raise SystemExit(f"Cannot open camera {args.camera}")
+    cap = open_checked(args)
 
     window = "Ozobot Band Detection"
     print("Press q to quit.")
