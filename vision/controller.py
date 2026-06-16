@@ -1,33 +1,39 @@
 #!/usr/bin/env python3
-"""Present a sheet, decode its colours, and drive the Unitree G1 accordingly.
+"""Present a sheet, decode its colours, and drive the robot accordingly.
 
 This is the bridge between the two packages:
 
     vision  (decode the colour order off a white sheet)  ->
-    motion  (execute the move for each colour on the G1)
+    motion  (execute the move for each colour on the robot)
 
 Colour -> motion (in the order the colours appear on the sheet):
 
-    green   -> walk forward 1 m
-    blue    -> turn +45 deg (left)
-    yellow  -> turn -45 deg (right)
+    green   -> walk forward  (1 m for G1, 0.5 m for LeKiwi)
+    blue    -> turn +45 deg (left/CCW)
+    yellow  -> turn -45 deg (right/CW)
     orange  -> wave
 
 Interpreter split (important): vision needs OpenCV from the project ``.venv``,
-while the Unitree SDK is installed only for the system ``/usr/bin/python3`` (see
-motion/README.md). So this script runs under ``.venv`` and invokes motion through
-its CLI as a subprocess::
+while the Unitree SDK lives in the system ``/usr/bin/python3`` and the LeKiwi
+lerobot stack lives in the miniforge interpreter. Motion is invoked as a
+subprocess so this controller can work with either robot::
 
+    # G1 (system Python + Unitree SDK)
     /usr/bin/python3 -m motion --yes --iface eth0 walk 1.0
+
+    # LeKiwi (miniforge Python + lerobot)
+    ~/miniforge3/bin/python3 -m motion --robot lekiwi --yes walk 0.5
 
 Safety: the robot only moves with ``--execute``. Without it the controller is a
 dry run that prints/speaks the plan but sends no motion commands.
 
-    # Dry run on the sample sheet (no robot, no SDK needed)
+    # Dry run (no robot, no SDK needed)
     python -m vision.controller --image image.png
+    python -m vision.controller --robot lekiwi --camera 0
 
-    # Live, really drive the robot
-    python -m vision.controller --camera 4 --execute --iface eth0
+    # Live, really drive the robots
+    python -m vision.controller --execute --iface eth0
+    python -m vision.controller --robot lekiwi --camera 0 --execute
 """
 
 from __future__ import annotations
@@ -49,47 +55,78 @@ from vision.missions import Mission, load_action_map  # noqa: E402
 from vision.pipeline import MissionPipeline  # noqa: E402
 from vision.tts import FrenchTTS  # noqa: E402
 
-# Colour -> ("motion subcommand", argument). ``None`` argument = no positional
-# (wave). Order is taken from the sheet, not this dict.
-COLOR_MOTIONS: dict = {
-    "green": ("walk", "1.0"),    # forward 1 m
-    "blue": ("turn", "45"),      # +45 deg (left / CCW)
+# Colour -> ("motion subcommand", argument) per robot.
+# ``None`` argument = no positional arg (wave). Order from the sheet, not here.
+_MOTIONS_G1: dict = {
+    "green":  ("walk", "1.0"),   # forward 1 m
+    "blue":   ("turn", "45"),    # +45 deg (left / CCW)
     "yellow": ("turn", "-45"),   # -45 deg (right / CW)
     "orange": ("wave", None),    # arm gesture
 }
+_MOTIONS_LEKIWI: dict = {
+    "green":  ("walk", "0.5"),   # forward 0.5 m (smaller robot)
+    "blue":   ("turn", "45"),    # +45 deg (left / CCW)
+    "yellow": ("turn", "-45"),   # -45 deg (right / CW)
+    "orange": ("wave", None),    # arm wave gesture
+}
+
+# Resolved at build() time from --robot arg.
+COLOR_MOTIONS: dict = _MOTIONS_G1
 
 
 class MotionExecutor:
     """Run motion commands by shelling out to the ``motion`` CLI.
 
-    Kept as a subprocess on purpose: the Unitree SDK lives in the system
-    interpreter, this controller in the ``.venv``. ``execute=False`` is a dry run
-    that only logs the commands (safe default — the robot does not move).
+    Kept as a subprocess: the Unitree SDK lives in the system interpreter, the
+    LeKiwi lerobot stack in miniforge — both are different from the vision .venv.
+    ``execute=False`` is a dry run (safe default — the robot does not move).
     """
 
     def __init__(
         self,
-        python_bin: str = "/usr/bin/python3",
+        robot: str = "g1",
+        python_bin: Optional[str] = None,
         iface: str = "eth0",
+        port: str = "/dev/ttyACM0",
         execute: bool = False,
         timeout: float = 60.0,
     ):
-        self.python_bin = python_bin
+        self.robot = robot
         self.iface = iface
+        self.port = port
         self.execute = execute
         self.timeout = timeout
+        # Default interpreter per robot if the caller did not override.
+        if python_bin is None:
+            import shutil
+            if robot == "lekiwi":
+                # Prefer miniforge Python (where lerobot is installed).
+                python_bin = (
+                    shutil.which("python3",
+                                 path="/home/simon/miniforge3/bin:/usr/local/bin:/usr/bin")
+                    or "python3"
+                )
+            else:
+                python_bin = "/usr/bin/python3"
+        self.python_bin = python_bin
+        self.color_motions = _MOTIONS_LEKIWI if robot == "lekiwi" else _MOTIONS_G1
 
     def _command(self, subcmd: str, arg: Optional[str]) -> List[str]:
-        # The motion CLI's --yes/--iface are parent options: argparse requires
-        # them *before* the subcommand, not after.
-        cmd = [self.python_bin, "-m", "motion", "--yes", "--iface", self.iface, subcmd]
+        # All --yes / --robot / --iface / --port flags are parent options and
+        # must appear before the subcommand in the motion CLI.
+        cmd = [self.python_bin, "-m", "motion", "--yes", "--robot", self.robot]
+        if self.robot == "lekiwi":
+            cmd += ["--port", self.port]
+        else:
+            cmd += ["--iface", self.iface]
+        cmd.append(subcmd)
         if arg is not None:
             cmd.append(arg)
         return cmd
 
     def run(self, color: str) -> bool:
         """Execute the motion mapped to ``color``. Returns True on success."""
-        plan = COLOR_MOTIONS.get(color)
+        plan = self.color_motions.get(color)
         if plan is None:
             print(f"  · {color}: no motion mapped, skipping")
             return False
@@ -106,7 +143,7 @@ class MotionExecutor:
             print(f"    ! motion {pretty} timed out after {self.timeout:.0f}s")
             return False
         except FileNotFoundError:
-            print(f"    ! cannot run {self.python_bin!r}; is the system interpreter correct?")
+            print(f"    ! cannot run {self.python_bin!r}; interpreter not found")
             return False
         if result.returncode != 0:
             print(f"    ! motion {pretty} exited with code {result.returncode}")
@@ -140,9 +177,11 @@ def execute_mission(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Decode a colour sheet and drive the Unitree G1 accordingly",
+        description="Decode a colour sheet and drive the robot accordingly",
     )
     add_source_args(parser)
+    parser.add_argument("--robot", choices=["g1", "lekiwi"], default="g1",
+                        help="which robot to control (default: g1)")
     parser.add_argument("--calibration", type=Path, default=Path("calibration.json"))
     parser.add_argument("--actions", type=Path, default=None,
                         help="Override colour -> French action phrasing")
@@ -152,9 +191,13 @@ def parse_args() -> argparse.Namespace:
                         help="Grab one frame, run the mission, exit")
     parser.add_argument("--execute", action="store_true",
                         help="Actually drive the robot (default: dry run)")
-    parser.add_argument("--iface", default="eth0", help="Robot network interface")
-    parser.add_argument("--python", dest="python_bin", default="/usr/bin/python3",
-                        help="Interpreter with the Unitree SDK (default /usr/bin/python3)")
+    # G1 options
+    parser.add_argument("--iface", default="eth0", help="G1: robot network interface")
+    parser.add_argument("--python", dest="python_bin", default=None,
+                        help="Override the Python interpreter used for the motion subprocess")
+    # LeKiwi options
+    parser.add_argument("--port", default="/dev/ttyACM0",
+                        help="LeKiwi: serial port (default /dev/ttyACM0)")
     parser.add_argument("--stable-frames", type=int, default=6,
                         help="Frames a sheet must persist before it triggers (live)")
     parser.add_argument("--no-tts", action="store_true", help="Disable French speech")
@@ -173,7 +216,11 @@ def build(args: argparse.Namespace) -> Tuple[MissionPipeline, MotionExecutor, Fr
         stable_frames=args.stable_frames,
     )
     executor = MotionExecutor(
-        python_bin=args.python_bin, iface=args.iface, execute=args.execute
+        robot=args.robot,
+        python_bin=args.python_bin,
+        iface=args.iface,
+        port=args.port,
+        execute=args.execute,
     )
     action_map = load_action_map(cal, args.actions)
     return pipeline, executor, tts, action_map
@@ -193,9 +240,14 @@ def run_live(args, pipeline, executor, tts, action_map) -> int:
     window = "Sheet -> G1 controller (q=quit)"
     show = not args.no_preview
     if show:
-        cv2.namedWindow(window)
+        try:
+            cv2.namedWindow(window)
+        except cv2.error:
+            print("No display available — running without preview (use --no-preview to suppress this).")
+            show = False
     mode = "EXECUTE" if executor.execute else "DRY RUN"
-    print(f"[{mode}] {tts.describe()} | iface={executor.iface}")
+    target = f"port={executor.port}" if executor.robot == "lekiwi" else f"iface={executor.iface}"
+    print(f"[{mode}] robot={executor.robot} | {tts.describe()} | {target}")
     print("Present a sheet to the camera. Press q to quit.")
     armed = True  # require the sheet to clear before re-triggering
     try:
