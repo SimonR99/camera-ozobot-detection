@@ -69,6 +69,16 @@ def test_pipeline_builds_mission_from_frame():
     assert all(a for a in obs.mission.actions)
 
 
+def test_repeated_trailing_colour_is_read():
+    # green-blue-orange-blue has only 3 unique colours; the trailing blue repeat
+    # must still be captured (segment-count tie-breaker in _score_result).
+    frame = _band(["green", "blue", "orange", "blue"])
+    result = _detector().detect(frame)
+    seq = [c for c in result.colors_sequence if c != "black"]
+    assert seq.count("blue") == 2
+    assert seq[-1] == "blue"
+
+
 def test_uniform_white_sheet_has_no_mission():
     frame = np.full((120, 240, 3), (245, 245, 245), dtype=np.uint8)
     result = _detector().detect(frame)

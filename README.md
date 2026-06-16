@@ -35,7 +35,8 @@ In the order the colours appear on the sheet:
 ## Quick start
 
 ```bash
-pip install -e .          # installs vision + its deps into the .venv
+pip install -e ".[tts]"   # vision + Kokoro neural French TTS into the .venv
+                          # (use `pip install -e .` to skip TTS; falls back to spd-say)
 
 # 1. See the decoding only (no robot): reads the bundled sample sheet
 python -m vision.run --image image.png
