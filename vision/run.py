@@ -85,7 +85,18 @@ def parse_args() -> argparse.Namespace:
         "--tts-rate",
         type=int,
         default=None,
-        help="Speech rate passed to the backend (backend-specific scale)",
+        help="Speech rate passed to the CLI backends (backend-specific scale)",
+    )
+    parser.add_argument(
+        "--tts-speed",
+        type=float,
+        default=1.0,
+        help="Kokoro speech speed multiplier (1.0 = normal)",
+    )
+    parser.add_argument(
+        "--tts-voice",
+        default=None,
+        help="Kokoro voice name (default ff_siwis, the French voice)",
     )
     parser.add_argument(
         "--no-tts",
@@ -103,6 +114,17 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Disable the live preview window (live mode)",
     )
+    parser.add_argument(
+        "--width",
+        type=int,
+        default=640,
+        help="Resize frames to this width before processing (0 = keep original)",
+    )
+    parser.add_argument(
+        "--no-flip",
+        action="store_true",
+        help="Disable the default 180-degree frame rotation",
+    )
     return parser.parse_args()
 
 
@@ -111,6 +133,8 @@ def build_pipeline(args: argparse.Namespace) -> MissionPipeline:
         backend=args.tts_backend,
         rate=args.tts_rate,
         enabled=not args.no_tts,
+        voice=args.tts_voice,
+        speed=args.tts_speed,
     )
     cal = args.calibration if args.calibration.exists() else None
     return MissionPipeline(
@@ -119,6 +143,18 @@ def build_pipeline(args: argparse.Namespace) -> MissionPipeline:
         tts=tts,
         stable_frames=args.stable_frames,
     )
+
+
+def preprocess(frame: np.ndarray, args: argparse.Namespace) -> np.ndarray:
+    if not args.no_flip:
+        frame = cv2.rotate(frame, cv2.ROTATE_180)
+    if args.width > 0:
+        h, w = frame.shape[:2]
+        long_side = max(h, w)
+        if long_side > args.width:
+            scale = args.width / long_side
+            frame = cv2.resize(frame, (int(w * scale), int(h * scale)))
+    return frame
 
 
 def report(obs, pipeline: MissionPipeline, save_json: Path = None) -> None:
@@ -142,6 +178,7 @@ def run_image(pipeline: MissionPipeline, args: argparse.Namespace) -> int:
     frame = cv2.imread(str(args.image))
     if frame is None:
         raise SystemExit(f"Could not read image: {args.image}")
+    frame = preprocess(frame, args)
     obs = pipeline.process(frame)
     report(obs, pipeline, args.save_json)
     if obs.detected:
@@ -155,6 +192,7 @@ def run_once(pipeline: MissionPipeline, args: argparse.Namespace) -> int:
         ret, frame = cap.read()
         if not ret:
             raise SystemExit("Failed to read a frame from the source")
+        frame = preprocess(frame, args)
         obs = pipeline.process(frame)
         report(obs, pipeline, args.save_json)
         if obs.detected:
@@ -172,12 +210,14 @@ def run_live(pipeline: MissionPipeline, args: argparse.Namespace) -> int:
         cv2.namedWindow(window)
     print(f"{pipeline.tts.describe()} | {pipeline.detector.calibration_path or 'defaults'}")
     print("Press q to quit, s to re-speak the current mission, r to reset.")
+    pipeline.tts.warm_up()  # load the neural model now, not on first mission
     last_code = None
     try:
         while True:
             ret, frame = cap.read()
             if not ret:
                 break
+            frame = preprocess(frame, args)
             obs = pipeline.update(frame, full=not args.steps)
 
             code = "-".join(obs.mission.colors) if obs.detected else None

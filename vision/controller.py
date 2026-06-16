@@ -159,13 +159,23 @@ def parse_args() -> argparse.Namespace:
                         help="Frames a sheet must persist before it triggers (live)")
     parser.add_argument("--no-tts", action="store_true", help="Disable French speech")
     parser.add_argument("--tts-backend", default="auto")
+    parser.add_argument("--tts-speed", type=float, default=1.0,
+                        help="Kokoro speech speed multiplier (1.0 = normal)")
+    parser.add_argument("--tts-voice", default=None,
+                        help="Kokoro voice name (default ff_siwis)")
     parser.add_argument("--no-preview", action="store_true")
     return parser.parse_args()
 
 
 def build(args: argparse.Namespace) -> Tuple[MissionPipeline, MotionExecutor, FrenchTTS, dict]:
     cal = args.calibration if args.calibration.exists() else None
-    tts = FrenchTTS(backend=args.tts_backend, enabled=not args.no_tts)
+    tts = FrenchTTS(
+        backend=args.tts_backend,
+        enabled=not args.no_tts,
+        voice=args.tts_voice,
+        speed=args.tts_speed,
+    )
+    tts.warm_up()  # preload the neural model so the first action speaks instantly
     pipeline = MissionPipeline(
         calibration_path=cal,
         actions_path=args.actions,

@@ -18,7 +18,7 @@ vision/
   detector.py      # BandDetector: position/angle search reads the colour order
   frame_source.py  # webcam (--camera) AND ROS 2 (--ros-topic) backends
   missions.py      # ordered colour -> French action mapping
-  tts.py           # French TTS with backend fallback (spd-say/espeak/pyttsx3/gtts/print)
+  tts.py           # French TTS: Kokoro-82M neural voice, fallback to spd-say/espeak/print
   pipeline.py      # MissionPipeline: frame -> detection -> mission -> speech
   run.py           # CLI: read a sheet and speak its mission
   controller.py    # CLI: read a sheet and DRIVE the Unitree G1 (see ../motion)
@@ -60,8 +60,18 @@ Mission: yellow-blue-orange
 ```
 
 Useful flags: `--steps` (speak each action separately instead of one sentence),
-`--no-tts` (print only), `--tts-backend spd-say|espeak-ng|espeak|pyttsx3|gtts|print`,
-`--no-preview`.
+`--no-tts` (print only), `--no-preview`,
+`--tts-backend kokoro|spd-say|espeak-ng|espeak|pyttsx3|gtts|print`,
+`--tts-speed 1.1`, `--tts-voice ff_siwis`.
+
+### French voice
+
+The default backend is **Kokoro-82M** (`kokoro-onnx`) with the French voice
+`ff_siwis` — natural neural speech, ~0.5 s/sentence on CPU (the same model
+`../actum` uses). Install it with `pip install -e ".[tts]"`; the model downloads
+once from Hugging Face and is then cached. If it is unavailable the pipeline falls
+back automatically to `spd-say`, then `espeak`/`print`. `available_backends()`
+reports what this machine can use.
 
 ## Colour → action mapping
 

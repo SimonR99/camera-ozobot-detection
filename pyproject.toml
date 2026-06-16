@@ -15,6 +15,14 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=7.0"]
+# Neural French TTS (Kokoro-82M). Without these, vision falls back to spd-say.
+tts = [
+    "kokoro-onnx>=0.3.0",
+    "onnxruntime>=1.17.0",
+    "huggingface-hub>=0.20.0",
+    "sounddevice>=0.4.6",
+    "soundfile>=0.12.1",
+]
 
 [tool.setuptools.packages.find]
 where = ["."]

@@ -51,6 +51,7 @@ class DetectionParams:
     angle_search_enabled: bool = True
     angle_search_step_deg: float = 3.0
     angle_refine_step_deg: float = 1.0
+    fixed_scan_angle_deg: float = 0.0
 
     @classmethod
     def from_dict(cls, data: dict) -> "DetectionParams":
@@ -73,6 +74,7 @@ class DetectionParams:
             angle_search_enabled=data.get("angle_search_enabled", True),
             angle_search_step_deg=data.get("angle_search_step_deg", 3.0),
             angle_refine_step_deg=data.get("angle_refine_step_deg", 1.0),
+            fixed_scan_angle_deg=data.get("fixed_scan_angle_deg", 0.0),
         )
 
 
@@ -469,6 +471,13 @@ class BandDetector:
         # Reading quality dominates so the search reads the fullest block; the
         # combination bonus is only a tie-breaker between equally rich readings.
         score = result.confidence + unique_colors * 0.1
+        # Tie-breaker: among readings with the same unique colours, prefer the one
+        # that captures more strips. Without this an ordered mission with a
+        # repeated colour (e.g. green-blue-orange-blue) scores the same whether
+        # the trailing repeat is read or not, so the search may drop it. The
+        # weight stays well below unique_colors so it never overrides colour
+        # richness — it only separates otherwise-equal readings.
+        score += len(result.colors_sequence) * 0.01
         if result.combination_detected:
             score += 0.05
         return score
@@ -583,7 +592,7 @@ class BandDetector:
             if self.params.angle_search_enabled:
                 result = self._search_angles_at(frame_bgr, center_x, center_y, line_len)
             else:
-                result = self._detect_at(frame_bgr, center_x, center_y, 0.0, line_len)
+                result = self._detect_at(frame_bgr, center_x, center_y, self.params.fixed_scan_angle_deg, line_len)
 
             if not result.band_detected:
                 continue
@@ -604,7 +613,7 @@ class BandDetector:
         center_x, center_y = self._fixed_scan_center(h, w)
         if self.params.angle_search_enabled:
             return self._search_angles_at(frame_bgr, center_x, center_y, line_len)
-        return self._detect_at(frame_bgr, center_x, center_y, 0.0, line_len)
+        return self._detect_at(frame_bgr, center_x, center_y, self.params.fixed_scan_angle_deg, line_len)
 
     def detect(self, frame_bgr: np.ndarray) -> BandDetectionResult:
         """Run detection on a BGR frame. Sets band_detected when 3-color band is found."""
@@ -617,7 +626,7 @@ class BandDetector:
         center_x, center_y = self._fixed_scan_center(h, w)
         if self.params.angle_search_enabled:
             return self._search_angles_at(frame_bgr, center_x, center_y, line_len)
-        return self._detect_at(frame_bgr, center_x, center_y, 0.0, line_len)
+        return self._detect_at(frame_bgr, center_x, center_y, self.params.fixed_scan_angle_deg, line_len)
 
     def draw_debug(
         self,
